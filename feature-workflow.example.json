@@ -1,0 +1,8 @@
+{
+  "project_number": 123,
+  "status_field": "Status",
+  "ready_status": "Ready",
+  "in_progress_status": "In progress",
+  "in_review_status": "In review",
+  "done_status": "Done"
+}
