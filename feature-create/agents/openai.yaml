@@ -1,7 +1,7 @@
 interface:
-  display_name: "创建功能"
-  short_description: "创建并开发受跟踪的功能"
-  default_prompt: "使用 $feature-create 创建并开发这个功能。"
+  display_name: "创建 Feature"
+  short_description: "创建并开发受跟踪的 Feature"
+  default_prompt: "使用 $feature-create 创建并开发这个 Feature。"
 
 policy:
   allow_implicit_invocation: false

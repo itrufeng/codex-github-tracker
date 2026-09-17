@@ -1,7 +1,7 @@
 interface:
-  display_name: "完成功能"
-  short_description: "将已审核的功能标记为完成并关闭议题"
-  default_prompt: "使用 $feature-done 将这个已审核的功能标记为完成并关闭议题。"
+  display_name: "完成 Feature"
+  short_description: "将完成 review 的 Feature 标记为 Done 并关闭 Issue"
+  default_prompt: "使用 $feature-done 将这个完成 review 的 Feature 标记为 Done 并关闭 Issue。"
 
 policy:
   allow_implicit_invocation: false
