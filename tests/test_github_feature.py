@@ -18,6 +18,37 @@ SPEC.loader.exec_module(github_feature)
 
 
 class WorkflowIssueStateTests(unittest.TestCase):
+    def test_create_accepts_summary_longer_than_thirty_characters(self):
+        summary = "这是一个已经经过提炼但长度明显超过三十个字符的清晰 Issue title 摘要"
+        names = {"ready": "Ready", "progress": "In progress"}
+
+        with tempfile.TemporaryDirectory() as directory:
+            git_dir = Path(directory)
+            output = io.StringIO()
+            with (
+                patch.object(github_feature, "context", return_value=("gh", Path.cwd(), git_dir, "o/r", "@me", 4, names)),
+                patch.object(github_feature, "request_text", return_value="新功能"),
+                patch.object(github_feature, "run", return_value="https://example.test/issues/2") as run,
+                patch.object(github_feature, "add_project_item", return_value={"id": "item-2"}),
+                patch.object(github_feature, "set_status"),
+                redirect_stdout(output),
+            ):
+                github_feature.command_create(type("Args", (), {"summary": summary, "request_file": "request.txt"})())
+
+        self.assertGreater(len(summary), 30)
+        self.assertEqual(run.call_args.args[6], summary)
+        self.assertEqual(json.loads(output.getvalue())["summary"], summary)
+
+    def test_create_rejects_empty_summary(self):
+        names = {"ready": "Ready", "progress": "In progress"}
+
+        with tempfile.TemporaryDirectory() as directory:
+            with (
+                patch.object(github_feature, "context", return_value=("gh", Path.cwd(), Path(directory), "o/r", "@me", 4, names)),
+                self.assertRaisesRegex(github_feature.WorkflowError, "摘要不能为空"),
+            ):
+                github_feature.command_create(type("Args", (), {"summary": "  \n ", "request_file": "request.txt"})())
+
     def test_create_explicitly_moves_from_ready_to_in_progress(self):
         transitions = []
         names = {"ready": "Ready", "progress": "In progress"}

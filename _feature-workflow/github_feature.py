@@ -376,8 +376,8 @@ def continue_comment(gh: str, repo: str, issue_number: int, body: str, operation
 def command_create(args):
     gh, _, git_dir, repo, owner, number, names = context()
     summary = " ".join(args.summary.split())
-    if not summary or len(summary) > 30:
-        raise WorkflowError("摘要必须包含 1 至 30 个 Unicode 字符")
+    if not summary:
+        raise WorkflowError("摘要不能为空")
     body = request_text(args.request_file, "feature-create")
     pending = state_path(git_dir)
     if pending.exists():

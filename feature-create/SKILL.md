@@ -13,7 +13,7 @@ metadata:
 
 Feature 请求仅指显式调用 `$feature-create` 之后的用户文字。不要把 `$feature-create` 本身写入请求、Issue body 或 Codex Goal。将其余文字原样保存到临时 UTF-8 文件，不要用摘要替代。脚本也会确定性地移除开头的一个 `$feature-create` 标记，作为安全保障。
 
-1. 生成清晰的 Issue title 摘要，最多 30 个 Unicode 字符，让用户看到后能回想起 Feature 内容。Issue title 只使用摘要，不添加 Branch 前缀。
+1. 生成清晰且非空的 Issue title 摘要，让用户看到后能回想起 Feature 内容。只要内容已经是摘要，就不限制字符数量；Issue title 只使用摘要，不添加 Branch 前缀。
 2. 以本 `SKILL.md` 为基准解析 `../_feature-workflow/github_feature.py`，然后执行 `create --summary <摘要> --request-file <文件>`。脚本会确定性地识别当前 GitHub repository 和 Project。对于新请求，它会创建 Issue 并通过 `--assignee @me` assign 给当前 GitHub 用户、加入 Project、显式移至 Ready，再移至 In progress，同时在 Git local state 中保存 Issue number 和 Ready 步骤完成标记；不要假设新 Project item 具有任何初始 Status。如果已有 pending state，脚本只会在验证 repository、Project、Issue URL 和完整 Issue body 都与本次请求一致后，按已保存的 Issue number 恢复，校验当前用户仍是 assignee，并补齐尚未完成的 Status 步骤；绝不能根据摘要搜索。读取标准输出的 JSON：
    - `created`：已创建新 Issue。
    - `resumed`：已恢复现有 Issue。
