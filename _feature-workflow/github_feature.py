@@ -302,7 +302,7 @@ def pending_issue(gh: str, repo: str, state: dict, request: str) -> dict:
         "--repo",
         repo,
         "--json",
-        "number,title,body,url,state",
+        "number,title,body,url,state,assignees",
     )
     if issue.get("number") != state["issue_number"] or issue.get("url") != state["issue_url"]:
         raise WorkflowError("待处理的议题编号或网址已与 GitHub 不一致")
@@ -320,6 +320,18 @@ def pending_issue(gh: str, repo: str, state: dict, request: str) -> dict:
         run(gh, "issue", "edit", str(state["issue_number"]), "--repo", repo, "--body", request)
     state["request_sha256"] = request_hash
     return issue
+
+
+def ensure_self_assigned(gh: str, repo: str, issue: dict) -> str:
+    viewer = run_json(gh, "api", "user").get("login")
+    if not isinstance(viewer, str) or not viewer:
+        raise WorkflowError("GitHub 当前用户缺少有效 login")
+    assignees = issue.get("assignees", [])
+    if not isinstance(assignees, list):
+        raise WorkflowError("Issue assignees 响应无效")
+    if viewer not in {assignee.get("login") for assignee in assignees if isinstance(assignee, dict)}:
+        run(gh, "issue", "edit", str(issue["number"]), "--repo", repo, "--add-assignee", "@me")
+    return viewer
 
 
 def issue_comments(gh: str, repo: str, issue_number: int) -> list[dict]:
@@ -375,6 +387,7 @@ def command_create(args):
         issue = pending_issue(gh, repo, state, body)
         if issue.get("title") != state["summary"]:
             raise WorkflowError(f"待处理的议题标题不符合预期：{issue.get('title')!r}")
+        state["assignee"] = ensure_self_assigned(gh, repo, issue)
         item_id = state.get("project_item_id")
         if not isinstance(item_id, str) or not item_id:
             item_id = ensure_project_item(gh, owner, number, state["issue_url"])["id"]
@@ -388,7 +401,19 @@ def command_create(args):
         pending.write_text(json.dumps(state, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         print(json.dumps({**state, "project_status": names["progress"], "action": "resumed"}, ensure_ascii=False))
         return
-    issue_url = run(gh, "issue", "create", "--repo", repo, "--title", summary, "--body", body)
+    issue_url = run(
+        gh,
+        "issue",
+        "create",
+        "--repo",
+        repo,
+        "--title",
+        summary,
+        "--body",
+        body,
+        "--assignee",
+        "@me",
+    )
     issue_number = int(issue_url.rstrip("/").rsplit("/", 1)[-1])
     state = {
         "repo": repo,
@@ -398,6 +423,7 @@ def command_create(args):
         "project_owner": owner,
         "project_number": number,
         "request_sha256": sha256_text(body),
+        "assignee": "@me",
     }
     pending.write_text(json.dumps(state, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     item = add_project_item(gh, owner, number, issue_url)

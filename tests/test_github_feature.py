@@ -31,7 +31,7 @@ class WorkflowIssueStateTests(unittest.TestCase):
             with (
                 patch.object(github_feature, "context", return_value=("gh", Path.cwd(), git_dir, "o/r", "@me", 4, names)),
                 patch.object(github_feature, "request_text", return_value="新功能"),
-                patch.object(github_feature, "run", return_value="https://example.test/issues/2"),
+                patch.object(github_feature, "run", return_value="https://example.test/issues/2") as run,
                 patch.object(github_feature, "add_project_item", return_value={"id": "item-2"}),
                 patch.object(github_feature, "set_status", side_effect=record_status),
                 redirect_stdout(output),
@@ -41,6 +41,20 @@ class WorkflowIssueStateTests(unittest.TestCase):
             state = json.loads(github_feature.state_path(git_dir).read_text(encoding="utf-8"))
 
         self.assertEqual(transitions, [("Ready", None), ("In progress", None)])
+        run.assert_called_once_with(
+            "gh",
+            "issue",
+            "create",
+            "--repo",
+            "o/r",
+            "--title",
+            "新功能",
+            "--body",
+            "新功能",
+            "--assignee",
+            "@me",
+        )
+        self.assertEqual(state["assignee"], "@me")
         self.assertIs(state["ready_set"], True)
         self.assertEqual(json.loads(output.getvalue())["project_status"], "In progress")
 
@@ -76,6 +90,7 @@ class WorkflowIssueStateTests(unittest.TestCase):
                 patch.object(github_feature, "context", return_value=("gh", Path.cwd(), git_dir, "o/r", "@me", 4, names)),
                 patch.object(github_feature, "request_text", return_value="新功能"),
                 patch.object(github_feature, "pending_issue", return_value=issue),
+                patch.object(github_feature, "ensure_self_assigned", return_value="octocat") as assign,
                 patch.object(github_feature, "set_status", side_effect=record_status),
                 redirect_stdout(output),
             ):
@@ -84,9 +99,34 @@ class WorkflowIssueStateTests(unittest.TestCase):
             migrated = json.loads(github_feature.state_path(git_dir).read_text(encoding="utf-8"))
 
         self.assertEqual(transitions, [("Ready", None), ("In progress", None)])
+        assign.assert_called_once_with("gh", "o/r", issue)
+        self.assertEqual(migrated["assignee"], "octocat")
         self.assertIs(migrated["ready_set"], True)
         self.assertNotIn("backlog_set", migrated)
         self.assertEqual(json.loads(output.getvalue())["action"], "resumed")
+
+    def test_ensure_self_assigned_only_edits_when_viewer_is_missing(self):
+        issue = {"number": 2, "assignees": [{"login": "someone-else"}]}
+
+        with (
+            patch.object(github_feature, "run_json", return_value={"login": "octocat"}),
+            patch.object(github_feature, "run") as run,
+        ):
+            login = github_feature.ensure_self_assigned("gh", "o/r", issue)
+
+        self.assertEqual(login, "octocat")
+        run.assert_called_once_with(
+            "gh", "issue", "edit", "2", "--repo", "o/r", "--add-assignee", "@me"
+        )
+
+        issue["assignees"].append({"login": "octocat"})
+        with (
+            patch.object(github_feature, "run_json", return_value={"login": "octocat"}),
+            patch.object(github_feature, "run") as run,
+        ):
+            github_feature.ensure_self_assigned("gh", "o/r", issue)
+
+        run.assert_not_called()
 
     def test_issue_table_contains_title_column_and_url(self):
         issue = {"title": "功能", "url": "https://example.test/1"}
