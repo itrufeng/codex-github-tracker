@@ -10,6 +10,7 @@ import secrets
 import shutil
 import subprocess
 import sys
+import unicodedata
 from pathlib import Path
 
 
@@ -222,6 +223,25 @@ def set_status(gh: str, owner: str, number: int, issue_url: str, names: dict, ta
     run(gh, "project", "item-edit", "--id", item_id, "--project-id", project_id, "--field-id", field["id"], "--single-select-option-id", options[0]["id"])
 
 
+def text_width(value: str) -> int:
+    return sum(2 if unicodedata.east_asian_width(character) in {"W", "F"} else 1 for character in value)
+
+
+def pad_text(value: str, width: int) -> str:
+    return value + " " * (width - text_width(value))
+
+
+def issue_table(issue: dict, status: str) -> str:
+    rows = [("标题", issue["title"]), ("列名", status), ("地址", issue["url"])]
+    label_width = max(text_width(label) for label, _ in rows)
+    value_width = max(text_width(value) for _, value in rows)
+    border = f"+{'-' * (label_width + 2)}+{'-' * (value_width + 2)}+"
+    lines = [border]
+    lines.extend(f"| {pad_text(label, label_width)} | {pad_text(value, value_width)} |" for label, value in rows)
+    lines.append(border)
+    return "\n".join(lines)
+
+
 def state_path(git_dir: Path) -> Path:
     return git_dir / "codex-feature-create.json"
 
@@ -359,7 +379,11 @@ def command_create(args):
         if not isinstance(item_id, str) or not item_id:
             item_id = ensure_project_item(gh, owner, number, state["issue_url"])["id"]
             state["project_item_id"] = item_id
-        # 恢复创建流程意味着开发已经开始，因此确保项目看板显示开发中。
+        if state.get("ready_set") is not True:
+            set_status(gh, owner, number, state["issue_url"], names, names["ready"], None, item_id)
+            state["ready_set"] = True
+            state.pop("backlog_set", None)
+            pending.write_text(json.dumps(state, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         set_status(gh, owner, number, state["issue_url"], names, names["progress"], None, item_id)
         pending.write_text(json.dumps(state, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         print(json.dumps({**state, "project_status": names["progress"], "action": "resumed"}, ensure_ascii=False))
@@ -379,8 +403,10 @@ def command_create(args):
     item = add_project_item(gh, owner, number, issue_url)
     state["project_item_id"] = item["id"]
     pending.write_text(json.dumps(state, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    # GitHub 最初会把项目项加入 Ready；在同一流程中将其移至 In progress。
-    set_status(gh, owner, number, issue_url, names, names["progress"], names["ready"], item["id"])
+    set_status(gh, owner, number, issue_url, names, names["ready"], None, item["id"])
+    state["ready_set"] = True
+    pending.write_text(json.dumps(state, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    set_status(gh, owner, number, issue_url, names, names["progress"], None, item["id"])
     print(json.dumps({**state, "project_status": names["progress"], "action": "created"}, ensure_ascii=False))
 
 
@@ -447,15 +473,33 @@ def command_review(_args):
     set_status(gh, owner, number, issue["url"], names, names["review"], None)
     if pending.exists():
         pending.unlink()
-    print(json.dumps(issue, ensure_ascii=False))
+    print(
+        json.dumps(
+            {**issue, "project_status": names["review"], "table": issue_table(issue, names["review"])},
+            ensure_ascii=False,
+        )
+    )
 
 
 def command_done(_args):
     gh, _, git_dir, repo, owner, number, names = context()
+    pending = state_path(git_dir)
     issue = issue_for_state(gh, repo, owner, number, load_state(git_dir))
     set_status(gh, owner, number, issue["url"], names, names["done"], None)
     ensure_issue_closed(gh, repo, issue)
-    print(json.dumps({**issue, "project_status": names["done"], "issue_state": issue["state"]}, ensure_ascii=False))
+    pending.unlink()
+    print(
+        json.dumps(
+            {
+                **issue,
+                "project_status": names["done"],
+                "issue_state": issue["state"],
+                "local_state": "cleared",
+                "table": issue_table(issue, names["done"]),
+            },
+            ensure_ascii=False,
+        )
+    )
 
 
 def parser() -> argparse.ArgumentParser:

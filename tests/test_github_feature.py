@@ -18,6 +18,86 @@ SPEC.loader.exec_module(github_feature)
 
 
 class WorkflowIssueStateTests(unittest.TestCase):
+    def test_create_explicitly_moves_from_ready_to_in_progress(self):
+        transitions = []
+        names = {"ready": "Ready", "progress": "In progress"}
+
+        def record_status(_gh, _owner, _number, _url, _names, target, expected, _item_id):
+            transitions.append((target, expected))
+
+        with tempfile.TemporaryDirectory() as directory:
+            git_dir = Path(directory)
+            output = io.StringIO()
+            with (
+                patch.object(github_feature, "context", return_value=("gh", Path.cwd(), git_dir, "o/r", "@me", 4, names)),
+                patch.object(github_feature, "request_text", return_value="新功能"),
+                patch.object(github_feature, "run", return_value="https://example.test/issues/2"),
+                patch.object(github_feature, "add_project_item", return_value={"id": "item-2"}),
+                patch.object(github_feature, "set_status", side_effect=record_status),
+                redirect_stdout(output),
+            ):
+                github_feature.command_create(type("Args", (), {"summary": "新功能", "request_file": "request.txt"})())
+
+            state = json.loads(github_feature.state_path(git_dir).read_text(encoding="utf-8"))
+
+        self.assertEqual(transitions, [("Ready", None), ("In progress", None)])
+        self.assertIs(state["ready_set"], True)
+        self.assertEqual(json.loads(output.getvalue())["project_status"], "In progress")
+
+    def test_create_migrates_legacy_backlog_marker_through_ready(self):
+        transitions = []
+        names = {"ready": "Ready", "progress": "In progress"}
+        issue = {
+            "number": 2,
+            "title": "新功能",
+            "body": "新功能",
+            "url": "https://example.test/issues/2",
+            "state": "OPEN",
+        }
+
+        def record_status(_gh, _owner, _number, _url, _names, target, expected, _item_id):
+            transitions.append((target, expected))
+
+        with tempfile.TemporaryDirectory() as directory:
+            git_dir = Path(directory)
+            state = {
+                "repo": "o/r",
+                "issue_number": 2,
+                "issue_url": issue["url"],
+                "summary": "新功能",
+                "project_owner": "@me",
+                "project_number": 4,
+                "project_item_id": "item-2",
+                "backlog_set": True,
+            }
+            github_feature.state_path(git_dir).write_text(json.dumps(state), encoding="utf-8")
+            output = io.StringIO()
+            with (
+                patch.object(github_feature, "context", return_value=("gh", Path.cwd(), git_dir, "o/r", "@me", 4, names)),
+                patch.object(github_feature, "request_text", return_value="新功能"),
+                patch.object(github_feature, "pending_issue", return_value=issue),
+                patch.object(github_feature, "set_status", side_effect=record_status),
+                redirect_stdout(output),
+            ):
+                github_feature.command_create(type("Args", (), {"summary": "新功能", "request_file": "request.txt"})())
+
+            migrated = json.loads(github_feature.state_path(git_dir).read_text(encoding="utf-8"))
+
+        self.assertEqual(transitions, [("Ready", None), ("In progress", None)])
+        self.assertIs(migrated["ready_set"], True)
+        self.assertNotIn("backlog_set", migrated)
+        self.assertEqual(json.loads(output.getvalue())["action"], "resumed")
+
+    def test_issue_table_contains_title_column_and_url(self):
+        issue = {"title": "功能", "url": "https://example.test/1"}
+
+        table = github_feature.issue_table(issue, "In review")
+
+        self.assertIn("| 标题 | 功能", table)
+        self.assertIn("| 列名 | In review", table)
+        self.assertIn("| 地址 | https://example.test/1", table)
+        self.assertEqual(len({github_feature.text_width(line) for line in table.splitlines()}), 1)
+
     def test_done_moves_project_item_before_closing_issue(self):
         events = []
         issue = {"number": 1, "title": "功能", "url": "https://example.test/1", "state": "OPEN"}
@@ -30,39 +110,77 @@ class WorkflowIssueStateTests(unittest.TestCase):
             events.append(args)
             return ""
 
-        output = io.StringIO()
-        with (
-            patch.object(github_feature, "context", return_value=("gh", Path.cwd(), Path.cwd(), "o/r", "@me", 4, names)),
-            patch.object(github_feature, "load_state", return_value={}),
-            patch.object(github_feature, "issue_for_state", return_value=issue),
-            patch.object(github_feature, "set_status", side_effect=record_status),
-            patch.object(github_feature, "run", side_effect=record_run),
-            redirect_stdout(output),
-        ):
-            github_feature.command_done(None)
+        with tempfile.TemporaryDirectory() as directory:
+            git_dir = Path(directory)
+            pending = github_feature.state_path(git_dir)
+            pending.write_text("{}", encoding="utf-8")
+            output = io.StringIO()
+            with (
+                patch.object(github_feature, "context", return_value=("gh", Path.cwd(), git_dir, "o/r", "@me", 4, names)),
+                patch.object(github_feature, "load_state", return_value={}),
+                patch.object(github_feature, "issue_for_state", return_value=issue),
+                patch.object(github_feature, "set_status", side_effect=record_status),
+                patch.object(github_feature, "run", side_effect=record_run),
+                redirect_stdout(output),
+            ):
+                github_feature.command_done(None)
+
+            self.assertFalse(pending.exists())
 
         self.assertEqual(events[0], "status")
         self.assertEqual(events[1], ("gh", "issue", "close", "1", "--repo", "o/r", "--reason", "completed"))
         self.assertEqual(
             json.loads(output.getvalue()),
-            {**issue, "project_status": "Done", "issue_state": "CLOSED"},
+            {
+                **issue,
+                "project_status": "Done",
+                "issue_state": "CLOSED",
+                "local_state": "cleared",
+                "table": github_feature.issue_table(issue, "Done"),
+            },
         )
 
     def test_done_does_not_close_an_already_closed_issue_again(self):
         issue = {"number": 1, "title": "功能", "url": "https://example.test/1", "state": "CLOSED"}
         names = {"done": "Done"}
 
-        with (
-            patch.object(github_feature, "context", return_value=("gh", Path.cwd(), Path.cwd(), "o/r", "@me", 4, names)),
-            patch.object(github_feature, "load_state", return_value={}),
-            patch.object(github_feature, "issue_for_state", return_value=issue),
-            patch.object(github_feature, "set_status"),
-            patch.object(github_feature, "run") as run,
-            redirect_stdout(io.StringIO()),
-        ):
-            github_feature.command_done(None)
+        with tempfile.TemporaryDirectory() as directory:
+            git_dir = Path(directory)
+            pending = github_feature.state_path(git_dir)
+            pending.write_text("{}", encoding="utf-8")
+            with (
+                patch.object(github_feature, "context", return_value=("gh", Path.cwd(), git_dir, "o/r", "@me", 4, names)),
+                patch.object(github_feature, "load_state", return_value={}),
+                patch.object(github_feature, "issue_for_state", return_value=issue),
+                patch.object(github_feature, "set_status"),
+                patch.object(github_feature, "run") as run,
+                redirect_stdout(io.StringIO()),
+            ):
+                github_feature.command_done(None)
+
+            self.assertFalse(pending.exists())
 
         run.assert_not_called()
+
+    def test_done_preserves_local_state_when_closing_fails(self):
+        issue = {"number": 1, "title": "功能", "url": "https://example.test/1", "state": "OPEN"}
+        names = {"done": "Done"}
+
+        with tempfile.TemporaryDirectory() as directory:
+            git_dir = Path(directory)
+            pending = github_feature.state_path(git_dir)
+            pending.write_text("{}", encoding="utf-8")
+            with (
+                patch.object(github_feature, "context", return_value=("gh", Path.cwd(), git_dir, "o/r", "@me", 4, names)),
+                patch.object(github_feature, "load_state", return_value={}),
+                patch.object(github_feature, "issue_for_state", return_value=issue),
+                patch.object(github_feature, "set_status"),
+                patch.object(github_feature, "run", side_effect=github_feature.WorkflowError("关闭失败")),
+                self.assertRaises(github_feature.WorkflowError),
+            ):
+                github_feature.command_done(None)
+
+            self.assertTrue(pending.exists())
 
     def test_continue_reopens_before_commenting_and_moving_project_item(self):
         events = []
@@ -100,6 +218,27 @@ class WorkflowIssueStateTests(unittest.TestCase):
         payload = json.loads(output.getvalue())
         self.assertEqual(payload["project_status"], "In progress")
         self.assertEqual(payload["issue_state"], "OPEN")
+
+    def test_review_returns_issue_table(self):
+        issue = {"number": 1, "title": "功能", "url": "https://example.test/1", "state": "OPEN"}
+        names = {"review": "In review"}
+
+        with tempfile.TemporaryDirectory() as directory:
+            git_dir = Path(directory)
+            github_feature.state_path(git_dir).write_text("{}", encoding="utf-8")
+            output = io.StringIO()
+            with (
+                patch.object(github_feature, "context", return_value=("gh", Path.cwd(), git_dir, "o/r", "@me", 4, names)),
+                patch.object(github_feature, "load_state", return_value={}),
+                patch.object(github_feature, "issue_for_state", return_value=issue),
+                patch.object(github_feature, "set_status"),
+                redirect_stdout(output),
+            ):
+                github_feature.command_review(None)
+
+        payload = json.loads(output.getvalue())
+        self.assertEqual(payload["project_status"], "In review")
+        self.assertEqual(payload["table"], github_feature.issue_table(issue, "In review"))
 
 
 if __name__ == "__main__":
