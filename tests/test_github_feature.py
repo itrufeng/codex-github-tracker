@@ -84,8 +84,11 @@ class WorkflowIssueStateTests(unittest.TestCase):
             "新功能",
             "--assignee",
             "@me",
+            "--label",
+            "enhancement",
         )
         self.assertEqual(state["assignee"], "@me")
+        self.assertEqual(state["label"], "enhancement")
         self.assertIs(state["ready_set"], True)
         self.assertEqual(json.loads(output.getvalue())["project_status"], "In progress")
 
@@ -122,6 +125,7 @@ class WorkflowIssueStateTests(unittest.TestCase):
                 patch.object(github_feature, "request_text", return_value="新功能"),
                 patch.object(github_feature, "pending_issue", return_value=issue),
                 patch.object(github_feature, "ensure_self_assigned", return_value="octocat") as assign,
+                patch.object(github_feature, "ensure_enhancement_label", return_value="enhancement") as label,
                 patch.object(github_feature, "set_status", side_effect=record_status),
                 redirect_stdout(output),
             ):
@@ -131,7 +135,9 @@ class WorkflowIssueStateTests(unittest.TestCase):
 
         self.assertEqual(transitions, [("Ready", None), ("In progress", None)])
         assign.assert_called_once_with("gh", "o/r", issue)
+        label.assert_called_once_with("gh", "o/r", issue)
         self.assertEqual(migrated["assignee"], "octocat")
+        self.assertEqual(migrated["label"], "enhancement")
         self.assertIs(migrated["ready_set"], True)
         self.assertNotIn("backlog_set", migrated)
         self.assertEqual(json.loads(output.getvalue())["action"], "resumed")
@@ -156,6 +162,23 @@ class WorkflowIssueStateTests(unittest.TestCase):
             patch.object(github_feature, "run") as run,
         ):
             github_feature.ensure_self_assigned("gh", "o/r", issue)
+
+        run.assert_not_called()
+
+    def test_ensure_enhancement_label_only_edits_when_missing(self):
+        issue = {"number": 2, "labels": [{"name": "bug"}]}
+
+        with patch.object(github_feature, "run") as run:
+            label = github_feature.ensure_enhancement_label("gh", "o/r", issue)
+
+        self.assertEqual(label, "enhancement")
+        run.assert_called_once_with(
+            "gh", "issue", "edit", "2", "--repo", "o/r", "--add-label", "enhancement"
+        )
+
+        issue["labels"].append({"name": "enhancement"})
+        with patch.object(github_feature, "run") as run:
+            github_feature.ensure_enhancement_label("gh", "o/r", issue)
 
         run.assert_not_called()
 

@@ -118,7 +118,7 @@ Status
 
 `feature-create` 会把议题编号和完整请求的哈希保存到 `.git/codex-feature-create.json`。再次执行 `feature-create` 不会创建另一个议题；它会加载精确的议题编号，并在恢复前验证仓库、项目、网址和完整议题正文。它绝不会根据摘要搜索。
 
-脚本创建 Issue 时会使用 `--assignee @me` assign 给当前 GitHub 用户。恢复 pending Issue 时会校验 assignees，并仅在当前用户缺失时补齐。随后脚本把 Issue 加入 Project，要求 `gh project item-add` 返回 JSON，保存其中的 Project item ID，然后显式将 Project item 移至 Ready，再移至 In progress。它不假设 GitHub 会赋予任何初始 Status，也不会立即依赖 `gh project item-list` 查到刚加入的 Project item。Ready 步骤完成后会保存标记，确保中断恢复时补齐步骤且不会无故回退；旧版 `backlog_set` 标记会迁移为 `ready_set`。对于没有 Project item ID 的旧 pending state，脚本会查找现有 Project item，或以幂等方式重新添加。
+脚本创建 Issue 时会使用 `--assignee @me` assign 给当前 GitHub 用户，并添加 `enhancement` label。恢复 pending Issue 时会校验 assignees 和 labels，仅在当前用户或 `enhancement` 缺失时补齐。随后脚本把 Issue 加入 Project，要求 `gh project item-add` 返回 JSON，保存其中的 Project item ID，然后显式将 Project item 移至 Ready，再移至 In progress。它不假设 GitHub 会赋予任何初始 Status，也不会立即依赖 `gh project item-list` 查到刚加入的 Project item。Ready 步骤完成后会保存标记，确保中断恢复时补齐步骤且不会无故回退；旧版 `backlog_set` 标记会迁移为 `ready_set`。对于没有 Project item ID 的旧 pending state，脚本会查找现有 Project item，或以幂等方式重新添加。
 
 如果恢复或手动加入的项目项最初落在其他状态，恢复时会先显式移动到 Ready，再移动到目标列。状态转换只校验目标是否存在，并且可以安全重试。
 

@@ -302,7 +302,7 @@ def pending_issue(gh: str, repo: str, state: dict, request: str) -> dict:
         "--repo",
         repo,
         "--json",
-        "number,title,body,url,state,assignees",
+        "number,title,body,url,state,assignees,labels",
     )
     if issue.get("number") != state["issue_number"] or issue.get("url") != state["issue_url"]:
         raise WorkflowError("待处理的议题编号或网址已与 GitHub 不一致")
@@ -332,6 +332,16 @@ def ensure_self_assigned(gh: str, repo: str, issue: dict) -> str:
     if viewer not in {assignee.get("login") for assignee in assignees if isinstance(assignee, dict)}:
         run(gh, "issue", "edit", str(issue["number"]), "--repo", repo, "--add-assignee", "@me")
     return viewer
+
+
+def ensure_enhancement_label(gh: str, repo: str, issue: dict) -> str:
+    label = "enhancement"
+    labels = issue.get("labels", [])
+    if not isinstance(labels, list):
+        raise WorkflowError("Issue labels 响应无效")
+    if label not in {item.get("name") for item in labels if isinstance(item, dict)}:
+        run(gh, "issue", "edit", str(issue["number"]), "--repo", repo, "--add-label", label)
+    return label
 
 
 def issue_comments(gh: str, repo: str, issue_number: int) -> list[dict]:
@@ -388,6 +398,7 @@ def command_create(args):
         if issue.get("title") != state["summary"]:
             raise WorkflowError(f"待处理的议题标题不符合预期：{issue.get('title')!r}")
         state["assignee"] = ensure_self_assigned(gh, repo, issue)
+        state["label"] = ensure_enhancement_label(gh, repo, issue)
         item_id = state.get("project_item_id")
         if not isinstance(item_id, str) or not item_id:
             item_id = ensure_project_item(gh, owner, number, state["issue_url"])["id"]
@@ -413,6 +424,8 @@ def command_create(args):
         body,
         "--assignee",
         "@me",
+        "--label",
+        "enhancement",
     )
     issue_number = int(issue_url.rstrip("/").rsplit("/", 1)[-1])
     state = {
@@ -424,6 +437,7 @@ def command_create(args):
         "project_number": number,
         "request_sha256": sha256_text(body),
         "assignee": "@me",
+        "label": "enhancement",
     }
     pending.write_text(json.dumps(state, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     item = add_project_item(gh, owner, number, issue_url)
