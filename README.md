@@ -61,9 +61,11 @@ _feature-workflow/
 
 ## 使用方式
 
-三个技能默认静默运行。成功结束时会显示字符表格，其中包含议题标题、项目列名和议题地址。任何异常或中断都会立即停止，不会自动分析原因、重试或继续目标。
+三个技能默认静默运行。成功结束时会显示字符表格，其中包含议题标题、项目列名和议题地址。任何异常或中断都会立即停止，不会自动分析原因或重试。
 
 三个技能都关闭了隐式调用，只能通过 `$feature-create`、`$feature-continue` 或 `$feature-done` 手动调用，不会由 AI 根据请求内容自动选择。
+
+三个技能都不管理 Codex Goal。直接调用时按普通任务执行；需要持久 Goal 时，由用户使用 `/goal` 包裹显式 Skill 调用，例如 `/goal 使用 $feature-create 完成……`。Goal 的创建、检查、暂停、恢复和完成均由外层 `/goal` 工作流负责。
 
 ## 项目字段和状态名称
 
@@ -112,7 +114,7 @@ Status
 
 脚本始终使用本地状态中保存的议题编号和精确的仓库、议题网址、项目项标识符、字段标识符、选项标识符进行操作；不根据分支名、标题或当前状态列猜测议题。缺少数据时会停止。
 
-调用名称属于控制语法，不属于功能内容。`feature-create` 会在写入议题正文前移除开头的一个 `$feature-create`；`feature-continue` 会在写入议题评论或计算待处理状态哈希前移除开头的一个 `$feature-continue`。`feature-done` 不会向 GitHub 写入请求文字。
+调用名称属于控制语法，不属于功能内容。`feature-create` 会在写入议题正文前移除开头的一个 `$feature-create`；`feature-continue` 会在写入议题评论或计算待处理状态哈希前移除开头的一个 `$feature-continue`。`feature-done` 不会向 GitHub 写入请求文字。Issue title 只概括请求内容或预期结果，不包含“Feature Create 创建的”“使用 feature-create”等调用来源或创建动作描述。
 
 ## 中断后的 feature-create 恢复
 
@@ -122,11 +124,7 @@ Status
 
 如果恢复或手动加入的项目项最初落在其他状态，恢复时会先显式移动到 Ready，再移动到目标列。状态转换只校验目标是否存在，并且可以安全重试。
 
-`feature-create` 只有在脚本成功返回 In progress 的 `project_status` 后，才会检查、创建或开始 Codex 目标。
-
-`feature-continue` 会先用 `get_goal` 检查是否存在冲突目标，但此时不会开始目标任务。只有脚本成功返回 In progress 的 `project_status` 后，才会创建或开始目标。目标内容一致且未结束时继续使用；没有未结束目标或之前的目标已经结束时创建新目标；遇到内容不同的未结束目标时停止。
-
-`feature-continue` 使用 `.git/codex-feature-continue.json` 保存当前继续开发周期。议题已经关闭时会先重新打开。发表评论前会生成不可见的唯一操作标记，因此发生部分失败后重试时，可以找到精确评论，而不会重复发表。只有项目项回到 In review 后才会清除该状态。内容一致且未结束的目标会继续使用；没有目标或目标已结束时，会为同一个待处理请求创建新目标。
+`feature-continue` 使用 `.git/codex-feature-continue.json` 保存当前继续开发周期。议题已经关闭时会先重新打开。发表评论前会生成不可见的唯一操作标记，因此发生部分失败后重试时，可以找到精确评论，而不会重复发表。只有项目项回到 In review 后才会清除该状态。
 
 项目状态修改和议题开关操作都是幂等的。`feature-done` 会先把项目项移到 Done，再以完成原因为议题执行关闭操作；两步都成功后删除 `.git/codex-feature-create.json`，让下一次 `feature-create` 创建新议题。部分失败时会保留状态以供重试。成功清理后，原功能不能再通过 `feature-continue` 恢复。
 

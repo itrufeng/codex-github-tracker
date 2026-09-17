@@ -408,9 +408,8 @@ def command_create(args):
             state["ready_set"] = True
             state.pop("backlog_set", None)
             pending.write_text(json.dumps(state, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-        set_status(gh, owner, number, state["issue_url"], names, names["progress"], None, item_id)
         pending.write_text(json.dumps(state, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-        print(json.dumps({**state, "project_status": names["progress"], "action": "resumed"}, ensure_ascii=False))
+        print(json.dumps({**state, "project_status": names["ready"], "action": "resumed"}, ensure_ascii=False))
         return
     issue_url = run(
         gh,
@@ -446,8 +445,21 @@ def command_create(args):
     set_status(gh, owner, number, issue_url, names, names["ready"], None, item["id"])
     state["ready_set"] = True
     pending.write_text(json.dumps(state, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    set_status(gh, owner, number, issue_url, names, names["progress"], None, item["id"])
-    print(json.dumps({**state, "project_status": names["progress"], "action": "created"}, ensure_ascii=False))
+    print(json.dumps({**state, "project_status": names["ready"], "action": "created"}, ensure_ascii=False))
+
+
+def command_start(_args):
+    gh, _, git_dir, repo, owner, number, names = context()
+    state = load_state(git_dir)
+    issue = issue_for_state(gh, repo, owner, number, state)
+    item_id = state.get("project_item_id")
+    if not isinstance(item_id, str) or not item_id:
+        item_id = project_item(gh, owner, number, issue["url"])["id"]
+        state["project_item_id"] = item_id
+    set_status(gh, owner, number, issue["url"], names, names["progress"], names["ready"], item_id)
+    state["progress_set"] = True
+    state_path(git_dir).write_text(json.dumps(state, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    print(json.dumps({**state, "project_status": names["progress"], "action": "started"}, ensure_ascii=False))
 
 
 def command_continue(args):
@@ -549,6 +561,8 @@ def parser() -> argparse.ArgumentParser:
     create.add_argument("--summary", required=True)
     create.add_argument("--request-file", required=True)
     create.set_defaults(handler=command_create)
+    start = sub.add_parser("start")
+    start.set_defaults(handler=command_start)
     cont = sub.add_parser("continue")
     cont.add_argument("--request-file", required=True)
     cont.set_defaults(handler=command_continue)

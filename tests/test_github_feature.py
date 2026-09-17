@@ -49,7 +49,7 @@ class WorkflowIssueStateTests(unittest.TestCase):
             ):
                 github_feature.command_create(type("Args", (), {"summary": "  \n ", "request_file": "request.txt"})())
 
-    def test_create_explicitly_moves_from_ready_to_in_progress(self):
+    def test_create_leaves_issue_in_ready(self):
         transitions = []
         names = {"ready": "Ready", "progress": "In progress"}
 
@@ -71,7 +71,7 @@ class WorkflowIssueStateTests(unittest.TestCase):
 
             state = json.loads(github_feature.state_path(git_dir).read_text(encoding="utf-8"))
 
-        self.assertEqual(transitions, [("Ready", None), ("In progress", None)])
+        self.assertEqual(transitions, [("Ready", None)])
         run.assert_called_once_with(
             "gh",
             "issue",
@@ -90,7 +90,7 @@ class WorkflowIssueStateTests(unittest.TestCase):
         self.assertEqual(state["assignee"], "@me")
         self.assertEqual(state["label"], "enhancement")
         self.assertIs(state["ready_set"], True)
-        self.assertEqual(json.loads(output.getvalue())["project_status"], "In progress")
+        self.assertEqual(json.loads(output.getvalue())["project_status"], "Ready")
 
     def test_create_migrates_legacy_backlog_marker_through_ready(self):
         transitions = []
@@ -133,7 +133,7 @@ class WorkflowIssueStateTests(unittest.TestCase):
 
             migrated = json.loads(github_feature.state_path(git_dir).read_text(encoding="utf-8"))
 
-        self.assertEqual(transitions, [("Ready", None), ("In progress", None)])
+        self.assertEqual(transitions, [("Ready", None)])
         assign.assert_called_once_with("gh", "o/r", issue)
         label.assert_called_once_with("gh", "o/r", issue)
         self.assertEqual(migrated["assignee"], "octocat")
@@ -141,6 +141,24 @@ class WorkflowIssueStateTests(unittest.TestCase):
         self.assertIs(migrated["ready_set"], True)
         self.assertNotIn("backlog_set", migrated)
         self.assertEqual(json.loads(output.getvalue())["action"], "resumed")
+
+    def test_start_moves_issue_from_ready_to_in_progress(self):
+        names = {"ready": "Ready", "progress": "In progress"}
+        with tempfile.TemporaryDirectory() as directory:
+            git_dir = Path(directory)
+            github_feature.state_path(git_dir).write_text(json.dumps({
+                "repo": "o/r", "issue_number": 2, "issue_url": "https://example.test/issues/2",
+                "project_owner": "@me", "project_number": 4, "project_item_id": "item-2",
+            }), encoding="utf-8")
+            with (
+                patch.object(github_feature, "context", return_value=("gh", Path.cwd(), git_dir, "o/r", "@me", 4, names)),
+                patch.object(github_feature, "issue_for_state", return_value={"number": 2, "url": "https://example.test/issues/2"}),
+                patch.object(github_feature, "set_status") as set_status,
+                redirect_stdout(io.StringIO()) as output,
+            ):
+                github_feature.command_start(type("Args", (), {})())
+        set_status.assert_called_once_with("gh", "@me", 4, "https://example.test/issues/2", names, "In progress", "Ready", "item-2")
+        self.assertEqual(json.loads(output.getvalue())["project_status"], "In progress")
 
     def test_ensure_self_assigned_only_edits_when_viewer_is_missing(self):
         issue = {"number": 2, "assignees": [{"login": "someone-else"}]}
@@ -197,8 +215,8 @@ class WorkflowIssueStateTests(unittest.TestCase):
         issue = {"number": 1, "title": "功能", "url": "https://example.test/1", "state": "OPEN"}
         names = {"done": "Done"}
 
-        def record_status(*_args):
-            events.append("status")
+        def record_status(_gh, _owner, _number, _url, _names, target, _expected):
+            events.append(("status", target))
 
         def record_run(*args):
             events.append(args)
@@ -221,7 +239,7 @@ class WorkflowIssueStateTests(unittest.TestCase):
 
             self.assertFalse(pending.exists())
 
-        self.assertEqual(events[0], "status")
+        self.assertEqual(events[0], ("status", "Done"))
         self.assertEqual(events[1], ("gh", "issue", "close", "1", "--repo", "o/r", "--reason", "completed"))
         self.assertEqual(
             json.loads(output.getvalue()),
@@ -279,7 +297,7 @@ class WorkflowIssueStateTests(unittest.TestCase):
     def test_continue_reopens_before_commenting_and_moving_project_item(self):
         events = []
         issue = {"number": 1, "title": "功能", "url": "https://example.test/1", "state": "CLOSED"}
-        names = {"progress": "In progress"}
+        names = {"ready": "Ready", "progress": "In progress"}
 
         def record_run(*args):
             events.append(args)
@@ -289,8 +307,8 @@ class WorkflowIssueStateTests(unittest.TestCase):
             events.append("comment")
             return {"id": 2}
 
-        def record_status(*_args):
-            events.append("status")
+        def record_status(_gh, _owner, _number, _url, _names, target, _expected):
+            events.append(("status", target))
 
         with tempfile.TemporaryDirectory() as directory:
             git_dir = Path(directory)
@@ -308,7 +326,7 @@ class WorkflowIssueStateTests(unittest.TestCase):
                 github_feature.command_continue(type("Args", (), {"request_file": "request.txt"})())
 
         self.assertEqual(events[0], ("gh", "issue", "reopen", "1", "--repo", "o/r"))
-        self.assertEqual(events[1:], ["comment", "status"])
+        self.assertEqual(events[1:], ["comment", ("status", "In progress")])
         payload = json.loads(output.getvalue())
         self.assertEqual(payload["project_status"], "In progress")
         self.assertEqual(payload["issue_state"], "OPEN")
