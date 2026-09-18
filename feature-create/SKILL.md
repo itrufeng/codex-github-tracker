@@ -16,13 +16,13 @@ Feature 请求仅指显式调用 `$feature-create` 之后的用户文字。不�
 本 Skill 不管理 Codex Goal。是否使用 `/goal` 以及 Goal 的创建、检查、暂停、恢复和完成，全部由用户和外层 `/goal` 工作流决定。
 
 1. 生成清晰且非空的 Issue title 摘要，让用户看到后能回想起 Feature 内容。只要内容已经是摘要，就不限制字符数量。Issue title 只概括请求本身的内容或预期结果，不描述调用来源、工作流或创建动作；不得加入“Feature Create 创建的”“使用 feature-create”“由 Codex 创建”等元叙述，也不添加 Branch 前缀。即使请求本身是在修改 `feature-create`，也应概括实际行为变化，例如使用“新 Issue 自动添加 enhancement label”，而不是“Feature Create 创建的 Issue 自动添加 enhancement label”。
-2. 以本 `SKILL.md` 为基准解析 `../_feature-workflow/github_feature.py`，然后执行 `create --summary <摘要> --request-file <文件>`。脚本会确定性地识别当前 GitHub repository 和 Project。对于新请求，它会创建 Issue，通过 `--assignee @me` assign 给当前 GitHub 用户并添加 `enhancement` label、加入 Project、显式移至 Ready，再移至 In progress，同时在 Git local state 中保存 Issue number 和 Ready 步骤完成标记；不要假设新 Project item 具有任何初始 Status。如果已有 pending state，脚本只会在验证 repository、Project、Issue URL 和完整 Issue body 都与本次请求一致后，按已保存的 Issue number 恢复，校验当前用户仍是 assignee 且 Issue 带有 `enhancement` label，并补齐尚未完成的 Status 步骤；绝不能根据摘要搜索。读取标准输出的 JSON：
+2. 以本 `SKILL.md` 为基准解析 `../_feature-workflow/github_feature.py`，然后执行 `create --summary <摘要> --request-file <文件>`。脚本会确定性地识别当前 GitHub repository 和 Project。对于新请求，它会创建 Issue，通过 `--assignee @me` assign 给当前 GitHub 用户并添加 `enhancement` label、加入 Project，再显式移至 Ready，同时在 Git local state 中保存 Issue number 和 Ready 步骤完成标记；不要假设新 Project item 具有任何初始 Status。如果已有 pending state，脚本只会在验证 repository、Project、Issue URL 和完整 Issue body 都与本次请求一致后，按已保存的 Issue number 恢复，校验当前用户仍是 assignee 且 Issue 带有 `enhancement` label，并补齐尚未完成的 Ready 步骤；绝不能根据摘要搜索。读取标准输出的 JSON：
    - `created`：已创建新 Issue。
    - `resumed`：已恢复现有 Issue。
-   - `project_status`：必须是配置的 In progress Status 名称。
+   - `project_status`：必须是配置的 Ready Status 名称。
 
    执行前先在沙箱中检查 `gh auth status`；如果明确显示认证无效或令牌失效，只将同一个必需的工作流命令以限定范围的主机权限重试一次，使其内部所需的 `gh` 命令使用主机认证；不得运行其他命令或扩大访问范围。
-3. 只有 `create` 成功且 `project_status` 确认 Issue 已经处于 In progress 后，才能开始实现 Feature。
+3. `create` 成功且 `project_status` 确认 Issue 处于 Ready 后，在真正开始检查代码、制定实现方案或修改文件之前，执行同一脚本的 `start`。读取标准输出的 JSON，要求 `action` 为 `started`，且 `project_status` 必须是配置的 In progress Status 名称。只有两项都确认后，才能检查并实现 Feature。`start` 可安全重试；如果 Status 已经是 In progress，它会补齐置顶和 local state。
 4. Branch 不是本工作流的一部分，不检查、创建、切换或记录 Branch；即使当前使用 `main` 或 `master` 也可以继续。
 5. 完成实现和适当验证。不要替用户 commit、push、merge 或 review 修改。
 6. 完成实现和验证后，执行同一脚本的 `review`。它使用本地保存的 Issue number，将 Project item 从 In progress 移至 In review，并返回 `table`。如果命令失败，立即停止。
