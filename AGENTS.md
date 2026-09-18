@@ -2,7 +2,7 @@
 
 ## 文档受众
 
-让 `README.md` 聚焦初次使用者所需的内容：安装、端到端使用示例、卸载、Project 选择以及可配置的 Status 名称。实现细节和维护者指南应放在本文件或 `docs/workflows.md` 中，不要继续扩充 `README.md`。
+让 `README.md` 聚焦初次使用者所需的配置和使用说明：简短的 Skill 概述、安装、端到端使用示例、卸载、Project 选择以及可配置的 Status 名称。安装、使用、卸载和常见问题均使用一级标题。实现细节和维护者指南应放在本文件或 `docs/workflows.md` 中，不要继续扩充 `README.md`。
 
 ## 组件
 
@@ -15,6 +15,18 @@
 默认的单选字段是 `Status`，选项为 Ready、In progress、In review 和 Done。仓库特定的覆盖配置位于 `.codex/feature-workflow.json`，对应配置项为 `status_field`、`ready_status`、`in_progress_status`、`in_review_status` 和 `done_status`。所有配置项均可省略；省略时保留默认值。
 
 当一个仓库关联了多个符合条件的 Project 时，使用同一配置文件中的 `project_number` 选择目标。不要添加 `project_owner`：Project 命令始终使用 `@me`，且不支持组织拥有的 Project。保持 `feature-workflow.example.json` 与可接受的配置结构一致。
+
+Project 解析通过 `Repository.projectsV2` 获取当前仓库关联的 Project。未配置 `project_number` 时，必须恰好存在一个由当前 GitHub 用户拥有且仍开放的 Project；配置后，编号必须精确匹配一个由该用户拥有且已关联当前仓库的 Project。
+
+## 安装与卸载
+
+`install.sh` 管理 `feature-create`、`feature-continue`、`feature-done` 和 `_feature-workflow` 四个目录。全局模式使用 `$HOME/.agents/skills`，项目模式先解析目标路径的 Git 根目录，再使用其中的 `.agents/skills`。
+
+安装时先验证全部来源目录和目标目录，再把每个目录复制到同一技能目录下的临时目录，写入 `.feature-workflow-managed` 标记，最后移动到目标位置。已有目标必须带有该标记且不能是符号链接；安装器不得覆盖同名但不受管理的目录。
+
+卸载时只删除名称在受管理列表中、位于所选技能目录内、不是符号链接且带有管理标记的目录。全局卸载不会扫描用户主目录；只有显式传入的 `--repo` 路径才会清理仓库数据。项目级卸载会自动把该项目加入清理列表。
+
+仓库数据清理会删除 `.codex/feature-workflow.json`、Git 目录中的 `codex-feature-create.json` 和 `codex-feature-continue.json`；如果 `.codex` 随后为空，也会删除该目录。`--repo` 只能用于卸载，并可重复传入。
 
 ## Git 和 Branch 行为
 
