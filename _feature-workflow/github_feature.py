@@ -208,12 +208,28 @@ def project_status(gh: str, owner: str, number: int, item_id: str, field_name: s
     return current_single_select(gh, item_id, field["id"])
 
 
+def move_project_item_to_top(gh: str, project_id: str, item_id: str) -> None:
+    query = "mutation($projectId:ID!,$itemId:ID!){updateProjectV2ItemPosition(input:{projectId:$projectId,itemId:$itemId}){clientMutationId}}"
+    run_json(
+        gh,
+        "api",
+        "graphql",
+        "-f",
+        f"query={query}",
+        "-f",
+        f"projectId={project_id}",
+        "-f",
+        f"itemId={item_id}",
+    )
+
+
 def set_status(gh: str, owner: str, number: int, issue_url: str, names: dict, target: str, expected: str | None, item_id: str | None = None):
     project_id, field = project_metadata(gh, owner, number, names["field"])
     if item_id is None:
         item_id = project_item(gh, owner, number, issue_url)["id"]
     current = current_single_select(gh, item_id, field["id"])
     if current == target:
+        move_project_item_to_top(gh, project_id, item_id)
         return
     if expected is not None and current != expected:
         raise WorkflowError(f"预期项目状态为 {expected!r}，实际为 {current!r}")
@@ -221,6 +237,7 @@ def set_status(gh: str, owner: str, number: int, issue_url: str, names: dict, ta
     if len(options) != 1:
         raise WorkflowError(f"状态字段必须恰好包含一个名为 {target!r} 的选项")
     run(gh, "project", "item-edit", "--id", item_id, "--project-id", project_id, "--field-id", field["id"], "--single-select-option-id", options[0]["id"])
+    move_project_item_to_top(gh, project_id, item_id)
 
 
 def text_width(value: str) -> int:

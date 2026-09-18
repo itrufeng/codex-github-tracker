@@ -18,6 +18,61 @@ SPEC.loader.exec_module(github_feature)
 
 
 class WorkflowIssueStateTests(unittest.TestCase):
+    def test_set_status_moves_changed_item_to_top(self):
+        names = {"field": "Status"}
+        field = {
+            "id": "field-1",
+            "options": [{"id": "option-1", "name": "In progress"}],
+        }
+        events = []
+
+        with (
+            patch.object(github_feature, "project_metadata", return_value=("project-1", field)),
+            patch.object(github_feature, "current_single_select", return_value="Ready"),
+            patch.object(github_feature, "run", side_effect=lambda *_args: events.append("status")),
+            patch.object(
+                github_feature,
+                "move_project_item_to_top",
+                side_effect=lambda *_args: events.append("position"),
+            ) as move_to_top,
+        ):
+            github_feature.set_status(
+                "gh", "@me", 4, "https://example.test/issues/2", names,
+                "In progress", "Ready", "item-2",
+            )
+
+        self.assertEqual(events, ["status", "position"])
+        move_to_top.assert_called_once_with("gh", "project-1", "item-2")
+
+    def test_set_status_retries_top_position_when_status_already_matches(self):
+        names = {"field": "Status"}
+        field = {"id": "field-1", "options": []}
+
+        with (
+            patch.object(github_feature, "project_metadata", return_value=("project-1", field)),
+            patch.object(github_feature, "current_single_select", return_value="In review"),
+            patch.object(github_feature, "run") as run,
+            patch.object(github_feature, "move_project_item_to_top") as move_to_top,
+        ):
+            github_feature.set_status(
+                "gh", "@me", 4, "https://example.test/issues/2", names,
+                "In review", None, "item-2",
+            )
+
+        run.assert_not_called()
+        move_to_top.assert_called_once_with("gh", "project-1", "item-2")
+
+    def test_move_project_item_to_top_omits_after_id(self):
+        with patch.object(github_feature, "run_json", return_value={}) as run_json:
+            github_feature.move_project_item_to_top("gh", "project-1", "item-2")
+
+        arguments = run_json.call_args.args
+        self.assertEqual(arguments[:3], ("gh", "api", "graphql"))
+        self.assertIn("updateProjectV2ItemPosition", arguments[4])
+        self.assertIn("projectId=project-1", arguments)
+        self.assertIn("itemId=item-2", arguments)
+        self.assertFalse(any(argument.startswith("afterId=") for argument in arguments))
+
     def test_create_accepts_summary_longer_than_thirty_characters(self):
         summary = "这是一个已经经过提炼但长度明显超过三十个字符的清晰 Issue title 摘要"
         names = {"ready": "Ready", "progress": "In progress"}

@@ -128,4 +128,6 @@ Status
 
 项目状态修改和议题开关操作都是幂等的。`feature-done` 会先把项目项移到 Done，再以完成原因为议题执行关闭操作；两步都成功后删除 `.git/codex-feature-create.json`，让下一次 `feature-create` 创建新议题。部分失败时会保留状态以供重试。成功清理后，原功能不能再通过 `feature-continue` 恢复。
 
+每次工作流把 Project item 移入 Ready、In progress、In review 或 Done 后，都会把它放到目标列顶部。定位步骤也可安全重试；如果 Status 已更新但置顶失败，再次运行相同命令会继续完成置顶。
+
 `review` 和 `done` 命令会生成统一字符表格。三个技能成功结束时均只以文本代码块显示该表格，不附加审核、提交、合并或其他后续操作提醒。
