@@ -1,6 +1,6 @@
 interface:
-  display_name: "创建 Feature"
-  short_description: "创建并开发受跟踪的 Feature"
+  display_name: "feature-create"
+  short_description: "创建并实现新功能，创建 Issue 并同步 GitHub Project Status"
   default_prompt: "使用 $feature-create 创建并开发这个 Feature。"
 
 policy:

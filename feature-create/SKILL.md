@@ -1,8 +1,8 @@
 ---
 name: feature-create
-description: 创建并开发新 Feature，同时同步 GitHub Issue 和 Project Status。适用于需要从 Ready、In progress 跟踪到 In review 的新 Feature 开发。
+description: 创建并实现新 Feature，创建 Issue 并同步 GitHub Project Status。
 metadata:
-  short-description: 创建并开发受跟踪的 Feature
+  short-description: 创建并实现新功能，创建 Issue 并同步 GitHub Project Status
 ---
 
 # 创建 Feature

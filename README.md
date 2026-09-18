@@ -65,6 +65,8 @@ _feature-workflow/
 
 三个技能都关闭了隐式调用，只能通过 `$feature-create`、`$feature-continue` 或 `$feature-done` 手动调用，不会由 AI 根据请求内容自动选择。
 
+技能提示列表中的命令名称保持为 `feature-create`、`feature-continue` 和 `feature-done`；中文仅用于显示功能描述，方便理解而不影响命令补全。
+
 三个技能都不管理 Codex Goal。直接调用时按普通任务执行；需要持久 Goal 时，由用户使用 `/goal` 包裹显式 Skill 调用，例如 `/goal 使用 $feature-create 完成……`。Goal 的创建、检查、暂停、恢复和完成均由外层 `/goal` 工作流负责。
 
 ## 项目字段和状态名称

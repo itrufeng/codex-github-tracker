@@ -1,8 +1,8 @@
 ---
 name: feature-done
-description: 将当前已完成 review 的 Feature 在关联 GitHub Project 中标记为 Done 并关闭 Issue。仅在用户已经完成 review 和 commit、准备结束跟踪流程时使用。
+description: 确认本次 Feature 完成，将同一 Issue 的 GitHub Project Status 标记为 Done 并关闭 Issue。
 metadata:
-  short-description: 将完成 review 的 Feature 标记为 Done 并关闭 Issue
+  short-description: 确认功能完成，将同一 Issue 的 Project Status 标记为 Done 并关闭 Issue
 ---
 
 # 完成 Feature

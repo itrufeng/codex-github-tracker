@@ -1,8 +1,8 @@
 ---
 name: feature-continue
-description: 继续开发受跟踪的 Feature，把请求记录到 GitHub Issue，并同步 Project Status。适用于 review 后需要继续修改 Feature 的情况。
+description: 继续澄清并实现 Feature 细节，在同一 Issue 追加 Comment 并同步 GitHub Project Status。
 metadata:
-  short-description: 继续开发受跟踪的 Feature
+  short-description: 继续澄清并实现功能细节，在同一 Issue 追加 Comment 并同步 GitHub Project Status
 ---
 
 # 继续开发 Feature

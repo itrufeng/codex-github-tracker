@@ -1,6 +1,6 @@
 interface:
-  display_name: "完成 Feature"
-  short_description: "将完成 review 的 Feature 标记为 Done 并关闭 Issue"
+  display_name: "feature-done"
+  short_description: "确认功能完成，将同一 Issue 的 Project Status 标记为 Done 并关闭 Issue"
   default_prompt: "使用 $feature-done 将这个完成 review 的 Feature 标记为 Done 并关闭 Issue。"
 
 policy:
