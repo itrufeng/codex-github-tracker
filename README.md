@@ -48,27 +48,68 @@ cd codex-github-tracker
 
 使用前，请确保当前 Git repository 已关联一个由当前 GitHub 用户拥有且仍开放的 Project。Project 默认需要有名为 `Status` 的字段，以及 Ready、In progress、In review 和 Done 四个选项；名称不同时可按下方“常见问题”中的说明配置。
 
+### `$feature-create` 用于提出并实现一个新 Feature。
+
 假设你已经有一个 Todo List App，现在想让它在每天开始时，对昨天没完成的任务重新安排优先级。在 Codex 中输入：
 
 ```text
 $feature-create 为 Todo List App 增加每日任务整理功能。每天第一次打开应用时，列出昨天未完成的任务，让用户通过拖拽重新安排它们的优先级，确认后保存新顺序。
 ```
 
-`$feature-create` 用于提出并实现一个新 Feature。
+这个Skill会让Github会自动跟踪到这个状态
 
-试用后，你可能发现某些昨日任务已经不需要再做。这时不需要重新创建 Feature，而是继续打磨当前 Feature：
+![](./assets/feature-create-ready.png)
+
+![](./assets/feature-create-ready-detail.png)
+
+并且在开始实现的时候改变状态
+
+![](./assets/feature-create-in-progress.png)
+
+![](./assets/feature-create-in-progress-detail.png)
+
+直到任务开发完成后
+
+![](./assets/feature-create-in-review.png)
+
+![](./assets/feature-create-in-review-detail.png)
+
+### `$feature-continue` 用于继续修改当前 Feature，可以多次使用，直到功能满意。
+
+试用开发完毕的软件以后，你可能发现某些昨日任务已经不需要再做。这时不需要重新创建 Feature，而是继续打磨当前 Feature：
 
 ```text
 $feature-continue 在重新安排昨日任务优先级时，为每个任务增加“放弃任务”选项。被放弃的任务不再进入今日列表，但仍保留在历史记录中。
 ```
 
-`$feature-continue` 用于继续修改当前 Feature，可以多次使用，直到功能满意。最后输入：
+这个Skill会让Github自动跟踪到这个状态
+
+![](./assets/feature-continue-in-review-detail.png)
+
+并且在开始实现的时候改变状态
+
+![](./assets/feature-continue-in-progress.png)
+
+直到任务开发完成后
+
+![](./assets/feature-continue-in-review-again.png)
+
+![](./assets/feature-continue-in-review-again-detail.png)
+
+### `$feature-done` 用于确认当前 Feature 已完成并结束本次工作流。
+
+经过试用功能后发现开发满足期望后，完成该功能开发：
 
 ```text
 $feature-done
 ```
 
-`$feature-done` 用于确认当前 Feature 已完成并结束本次工作流。
+这个Skill会让Github自动跟踪到这个状态
+
+![](./assets/feature-done-done.png)
+
+![](./assets/feature-done-done-detail.png)
+
 
 # 卸载
 
